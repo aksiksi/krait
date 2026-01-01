@@ -1,5 +1,5 @@
 {
-  description = "Krait eBPF network security system";
+  description = "Krait eBPF mesh VPN";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
@@ -21,6 +21,11 @@
         ];
       in
       {
+        # NixOS integration tests
+        checks = {
+          wireguardTest = pkgs.testers.nixosTest (import ./tests/wireguard.nix { inherit pkgs; });
+        };
+
         devShells.default = pkgs.mkShell {
           buildInputs = commonBuildInputs ++ [
             pkgs.rust-analyzer
@@ -49,8 +54,12 @@
             echo "Rust toolchain: $(rustc --version)"
             echo ""
             echo "Build commands:"
-            echo "  cargo build -p krait-ebpf --target bpfel-unknown-none -Z build-std=core --release"
-            echo "  cargo build -p krait-agent --target x86_64-unknown-linux-musl"
+            echo "  just build"
+            echo "  just build-ebpf"
+            echo "  just build-agent"
+            echo ""
+            echo "Test commands:"
+            echo "  just integration-test"
           '';
 
           # Environment variables for development

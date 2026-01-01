@@ -31,8 +31,8 @@ clean:
     cargo clean
 
 # Run the agent (requires sudo for eBPF loading)
-run-agent: build-all
-    sudo RUST_LOG=info ./target/x86_64-unknown-linux-musl/debug/{{krait_agent_bin}}
+run-agent intf: build-all
+    sudo RUST_LOG=info ./target/x86_64-unknown-linux-musl/debug/{{krait_agent_bin}} --iface {{intf}}
 
 # Check code formatting
 check-fmt:
@@ -49,6 +49,12 @@ clippy:
 # Run tests
 test:
     cargo test
+
+integration-test:
+    nix build .#checks.x86_64-linux.wireguardTest --print-out-paths
+
+integration-test-interactive:
+    nix build .#checks.x86_64-linux.wireguardTest.driverInteractive
 
 # Development workflow - format, lint, test, build
 dev: fmt clippy test build-all
