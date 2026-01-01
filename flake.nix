@@ -1,62 +1,62 @@
 {
-  description = "Krait development environment with Rust toolchains";
+  description = "Krait eBPF network security system";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
     flake-utils.url = "github:numtide/flake-utils";
-    rust-overlay = {
-      url = "github:oxalica/rust-overlay";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
   };
 
-  outputs = { self, nixpkgs, flake-utils, rust-overlay }:
+  outputs = { self, nixpkgs, flake-utils }:
     flake-utils.lib.eachDefaultSystem (system:
       let
-        overlays = [ (import rust-overlay) ];
         pkgs = import nixpkgs {
-          inherit system overlays;
+          inherit system;
         };
+        commonBuildInputs = [
+          pkgs.llvmPackages.libllvm
+          pkgs.bpftools
+          pkgs.bpf-linker
+          pkgs.pkg-config
+          pkgs.openssl
+        ];
       in
       {
         devShells.default = pkgs.mkShell {
-          nativeBuildInputs = [ 
-            # Must have rust-src for -Z build-std
-            (pkgs.rust-bin.nightly.latest.default.override {
-              extensions = [ "rust-src" ];
-            })
-          ];
-
-          buildInputs = [
-            # Rust toolchains
-            pkgs.rust-bin.nightly.latest.default
+          buildInputs = commonBuildInputs ++ [
             pkgs.rust-analyzer
-
-            # eBPF and kernel development tools
-            pkgs.llvmPackages.libllvm # for llvm-objdump
-            pkgs.bpftools
-            pkgs.bpf-linker
-
-            # WireGuard tools
+            pkgs.rustup
             pkgs.wireguard-tools
-
-            # General development tools
-            pkgs.pkg-config
-            pkgs.openssl
           ];
 
           shellHook = ''
             export RUSTC_BOOTSTRAP=1
 
+            # Install nightly Rust if not already available
+            if ! rustup toolchain list | grep -q nightly; then
+              echo "Installing Rust nightly toolchain..."
+              rustup toolchain install nightly
+            fi
+
+            # Install rust-src component for eBPF compilation
+            rustup component add --toolchain nightly rust-src
+
+            # Set nightly as default for this shell
+            rustup default nightly
+
+            rustup target add x86_64-unknown-linux-musl
+
             echo "Krait development environment"
+            echo "Rust toolchain: $(rustc --version)"
             echo ""
-            echo "eBPF tools available: bpftool, clang, llvm, bpf-linker"
-            echo "WireGuard tools: wg, wg-quick"
+            echo "Build commands:"
+            echo "  cargo build -p krait-ebpf --target bpfel-unknown-none -Z build-std=core --release"
+            echo "  cargo build -p krait-agent --target x86_64-unknown-linux-musl"
           '';
 
-          # Environment variables for eBPF development
+          # Environment variables for development
           LIBCLANG_PATH = "${pkgs.llvmPackages.libclang.lib}/lib";
           BINDGEN_EXTRA_CLANG_ARGS = "-I${pkgs.glibc.dev}/include";
         };
       });
 }
+
