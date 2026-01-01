@@ -20,29 +20,35 @@
       in
       {
         devShells.default = pkgs.mkShell {
-          buildInputs = with pkgs; [
+          nativeBuildInputs = [ 
+            # Must have rust-src for -Z build-std
+            (pkgs.rust-bin.nightly.latest.default.override {
+              extensions = [ "rust-src" ];
+            })
+          ];
+
+          buildInputs = [
             # Rust toolchains
-            rust-bin.stable.latest.default
-            rust-bin.nightly.latest.default
+            pkgs.rust-bin.nightly.latest.default
+            pkgs.rust-analyzer
 
             # eBPF and kernel development tools
-            bpftools
-            bpf-linker
+            pkgs.llvmPackages.libllvm # for llvm-objdump
+            pkgs.bpftools
+            pkgs.bpf-linker
 
             # WireGuard tools
-            wireguard-tools
+            pkgs.wireguard-tools
 
             # General development tools
-            pkg-config
-            openssl
-            cargo-generate
+            pkgs.pkg-config
+            pkgs.openssl
           ];
 
           shellHook = ''
+            export RUSTC_BOOTSTRAP=1
+
             echo "Krait development environment"
-            echo "Available Rust toolchains:"
-            echo "  - Stable: $(rustc --version)"
-            echo "  - Nightly: $(rustc +nightly --version 2>/dev/null || echo 'Use with: cargo +nightly')"
             echo ""
             echo "eBPF tools available: bpftool, clang, llvm, bpf-linker"
             echo "WireGuard tools: wg, wg-quick"
