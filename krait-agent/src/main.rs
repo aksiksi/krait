@@ -1,6 +1,12 @@
-use anyhow::Context as _;
-use aya::programs::{Xdp, XdpFlags};
+use aya::programs::{tc, SchedClassifier, TcAttachType};
 use clap::Parser;
+
+fn reset_tc(iface: &str) -> anyhow::Result<()> {
+    std::process::Command::new("tc")
+        .args(["qdisc", "del", "dev", iface, "clsact"])
+        .output()?; // ignore errors
+    Ok(())
+}
 
 #[derive(Debug, Parser)]
 struct Opt {
@@ -35,10 +41,26 @@ async fn main() -> anyhow::Result<()> {
             });
         }
     }
-    let program: &mut Xdp = ebpf.program_mut("krait").unwrap().try_into()?;
-    program.load()?;
-    program.attach(&opt.iface, XdpFlags::default())
-        .context("failed to attach the XDP program with default flags - try changing XdpFlags::default() to XdpFlags::SKB_MODE")?;
+
+    // Create clsact qdisc (required for TC attach)
+    reset_tc(&opt.iface)?;
+    if let Err(e) = tc::qdisc_add_clsact(&opt.iface) {
+        // EEXIST is fine, anything else is a real error
+        match e {
+            tc::TcError::AlreadyAttached => (),
+            _ => return Err(e.into()),
+        }
+    }
+
+    // Load and attach ingress
+    let ingress: &mut SchedClassifier = ebpf.program_mut("krait_ingress").unwrap().try_into()?;
+    ingress.load()?;
+    ingress.attach(&opt.iface, TcAttachType::Ingress)?;
+
+    // Load and attach egress
+    let egress: &mut SchedClassifier = ebpf.program_mut("krait_egress").unwrap().try_into()?;
+    egress.load()?;
+    egress.attach(&opt.iface, TcAttachType::Egress)?;
 
     let ctrl_c = tokio::signal::ctrl_c();
     println!("Waiting for Ctrl-C...");
