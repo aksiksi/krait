@@ -8,6 +8,7 @@ krait-common = { path = "../krait-common" }
 
 aya-ebpf = { workspace = true }
 aya-log-ebpf = { workspace = true }
+network-types = { version = "0.1.0", default-features = false }
 
 [build-dependencies]
 which = { workspace = true }

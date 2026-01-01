@@ -1,4 +1,5 @@
 # Krait build recipes
+krait_agent_bin := "krait"
 
 # Default recipe - build everything in debug mode
 default: build-all
@@ -31,7 +32,7 @@ clean:
 
 # Run the agent (requires sudo for eBPF loading)
 run-agent: build-all
-    sudo ./target/x86_64-unknown-linux-musl/debug/krait-agent
+    sudo RUST_LOG=info ./target/x86_64-unknown-linux-musl/debug/{{krait_agent_bin}}
 
 # Check code formatting
 check-fmt:
@@ -60,7 +61,7 @@ status:
     else \
         echo "✗ eBPF program (debug) not built"; \
     fi
-    @if [ -f "./target/x86_64-unknown-linux-musl/debug/krait-agent" ]; then \
+    @if [ -f "./target/x86_64-unknown-linux-musl/debug/{{krait_agent_bin}}" ]; then \
         echo "✓ Agent (debug) built"; \
     else \
         echo "✗ Agent (debug) not built"; \
@@ -72,7 +73,7 @@ status:
     else \
         echo "✗ eBPF program (release) not built"; \
     fi
-    @if [ -f "./target/x86_64-unknown-linux-musl/release/krait-agent" ]; then \
+    @if [ -f "./target/x86_64-unknown-linux-musl/release/{{krait_agent_bin}}" ]; then \
         echo "✓ Agent (release) built"; \
     else \
         echo "✗ Agent (release) not built"; \
