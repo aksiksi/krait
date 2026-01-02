@@ -9,8 +9,7 @@ use aya_ebpf::{
 };
 use aya_log_ebpf::info;
 use network_types::{
-    eth::{EthHdr, EtherType},
-    ip::{IpProto, Ipv4Hdr, Ipv6Hdr},
+    ip::{IpProto, Ipv4Hdr},
     tcp::TcpHdr,
     udp::UdpHdr,
 };
@@ -66,49 +65,47 @@ fn ptr_at<T>(ctx: &TcContext, offset: usize) -> Result<*const T, ()> {
 
 #[inline(always)]
 fn try_krait(ctx: TcContext, direction: Direction) -> Result<i32, ()> {
-    let ethhdr: *const EthHdr = ptr_at(&ctx, 0)?;
-    match unsafe { *ethhdr }.ether_type() {
-        Ok(EtherType::Ipv4) => {
-            let ipv4hdr: *const Ipv4Hdr = ptr_at(&ctx, EthHdr::LEN)?;
-            let source_addr = unsafe { (*ipv4hdr).src_addr() };
+    info!(&ctx, "krait: packet received on {} direction", direction.as_str());
+    
+    // wg0 is a TUN device - no Ethernet header, start directly with IP
+    let ipv4hdr: *const Ipv4Hdr = ptr_at(&ctx, 0)?;
+    
+    // Check if this looks like an IPv4 packet (basic validation)
+    let version = unsafe { (*ipv4hdr).version() };
+    if version != 4 {
+        info!(&ctx, "krait: not IPv4 packet, version = {}", version);
+        return Ok(TC_ACT_OK);
+    }
+    
+    let source_addr = unsafe { (*ipv4hdr).src_addr() };
+    let dest_addr = unsafe { (*ipv4hdr).dst_addr() };
+    let protocol = unsafe { (*ipv4hdr).proto };
+    
+    info!(&ctx, "krait: {} packet - SRC: {:i} -> DST: {:i}, proto: {}", 
+          direction.as_str(), source_addr, dest_addr, protocol as u8);
 
-            let source_port = match unsafe { (*ipv4hdr).proto } {
-                IpProto::Tcp => {
-                    let tcphdr: *const TcpHdr =
-                        ptr_at(&ctx, EthHdr::LEN + Ipv4Hdr::LEN)?;
-                    u16::from_be_bytes(unsafe { (*tcphdr).source })
-                }
-                IpProto::Udp => {
-                    let udphdr: *const UdpHdr =
-                        ptr_at(&ctx, EthHdr::LEN + Ipv4Hdr::LEN)?;
-                    unsafe { (*udphdr).src_port() }
-                }
-                _ => return Ok(TC_ACT_OK),
-            };
-
-            info!(&ctx, "{} - SRC IP: {:i}, SRC PORT: {}", direction.as_str(), source_addr, source_port);
+    // Parse L4 information if TCP/UDP
+    match protocol {
+        IpProto::Tcp => {
+            let tcphdr: *const TcpHdr = ptr_at(&ctx, Ipv4Hdr::LEN)?;
+            let src_port = unsafe { u16::from_be_bytes((*tcphdr).source) };
+            let dst_port = unsafe { u16::from_be_bytes((*tcphdr).dest) };
+            info!(&ctx, "krait: TCP {}:{} -> {}:{}", 
+                  source_addr, src_port, dest_addr, dst_port);
         }
-        Ok(EtherType::Ipv6) => {
-            let ipv6hdr: *const Ipv6Hdr = ptr_at(&ctx, EthHdr::LEN)?;
-            let source_addr = unsafe { (*ipv6hdr).src_addr() };
-
-            let source_port = match unsafe { (*ipv6hdr).next_hdr } {
-                IpProto::Tcp => {
-                    let tcphdr: *const TcpHdr =
-                        ptr_at(&ctx, EthHdr::LEN  + Ipv6Hdr::LEN)?;
-                    u16::from_be_bytes(unsafe { (*tcphdr).source })
-                }
-                IpProto::Udp => {
-                    let udphdr: *const UdpHdr =
-                        ptr_at(&ctx, EthHdr::LEN + Ipv6Hdr::LEN)?;
-                    unsafe { (*udphdr).src_port() }
-                }
-                _ => return Ok(TC_ACT_OK),
-            };
-
-            info!(&ctx, "{} - SRC IP: {:i}, SRC PORT: {}", direction.as_str(), source_addr, source_port);
+        IpProto::Udp => {
+            let udphdr: *const UdpHdr = ptr_at(&ctx, Ipv4Hdr::LEN)?;
+            let src_port = unsafe { (*udphdr).src_port() };
+            let dst_port = unsafe { (*udphdr).dst_port() };
+            info!(&ctx, "krait: UDP {}:{} -> {}:{}", 
+                  source_addr, src_port, dest_addr, dst_port);
         }
-        _ => {},
+        IpProto::Icmp => {
+            info!(&ctx, "krait: ICMP packet");
+        }
+        _ => {
+            info!(&ctx, "krait: other protocol: {}", protocol as u8);
+        }
     }
 
     Ok(TC_ACT_OK)
