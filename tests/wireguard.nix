@@ -9,7 +9,7 @@ let
   # via rustup, which breaks with Nix.
   kraitAgent = pkgs.stdenv.mkDerivation {
     name = "krait-agent-prebuilt";
-    src = ../target/x86_64-unknown-linux-musl/release;
+    src = ../target/x86_64-unknown-linux-musl/debug;
 
     installPhase = ''
       mkdir -p $out/bin
@@ -37,6 +37,10 @@ let
       ExecStart = "${kraitAgent}/bin/krait --iface wg0";
       Restart = "on-failure";
       RestartSec = "5s";
+
+      # Ensure logs go to journal
+      StandardOutput = "journal";
+      StandardError = "journal";
 
       # Security settings
       NoNewPrivileges = true;
@@ -74,11 +78,12 @@ in
         }];
       };
       environment.systemPackages = with pkgs; [
+        bpftools
         iperf3
-        tcpdump
         iproute2
+        tcpdump
       ];
-      
+
       # Krait agent systemd service
       systemd.services.krait-agent = kraitAgentService;
     };
@@ -97,11 +102,12 @@ in
         }];
       };
       environment.systemPackages = with pkgs; [
+        bpftools
         iperf3
-        tcpdump
         iproute2
+        tcpdump
       ];
-      
+
       # Krait agent systemd service
       systemd.services.krait-agent = kraitAgentService;
     };

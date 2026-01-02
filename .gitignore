@@ -10,4 +10,4 @@ target/
 
 # NixOS
 **/result
-
+**/.nixos-test-history

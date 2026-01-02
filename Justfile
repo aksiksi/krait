@@ -50,11 +50,11 @@ clippy:
 test:
     cargo test
 
-integration-test: release-agent
+integration-test: build-agent
     nix build .#checks.x86_64-linux.wireguardTest --print-out-paths
 
-integration-test-interactive:
-    nix build .#checks.x86_64-linux.wireguardTest.driverInteractive
+integration-test-interactive: build-agent
+    nix build .#checks.x86_64-linux.wireguardTest.driverInteractive && ./result/bin/nixos-test-driver
 
 # Development workflow - format, lint, test, build
 dev: fmt clippy test build-all

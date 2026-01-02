@@ -10,37 +10,23 @@ fn reset_tc(iface: &str) -> anyhow::Result<()> {
 
 #[derive(Debug, Parser)]
 struct Opt {
-    #[clap(short, long, default_value = "ens18")]
+    #[clap(short, long, default_value = "wg0")]
     iface: String,
 }
 
-#[tokio::main]
-async fn main() -> anyhow::Result<()> {
+fn main() -> anyhow::Result<()> {
     let opt = Opt::parse();
 
     env_logger::init();
+    
+    log::info!("Starting krait agent on interface: {}", opt.iface);
 
     let mut ebpf = aya::Ebpf::load(aya::include_bytes_aligned!(concat!(
         env!("OUT_DIR"),
         "/krait"
     )))?;
-    match aya_log::EbpfLogger::init(&mut ebpf) {
-        Err(e) => {
-            // This can happen if you remove all log statements from your eBPF program.
-            log::warn!("failed to initialize eBPF logger: {e}");
-        }
-        Ok(logger) => {
-            let mut logger =
-                tokio::io::unix::AsyncFd::with_interest(logger, tokio::io::Interest::READABLE)?;
-            tokio::task::spawn(async move {
-                loop {
-                    let mut guard = logger.readable_mut().await.unwrap();
-                    guard.get_inner_mut().flush();
-                    guard.clear_ready();
-                }
-            });
-        }
-    }
+
+    let mut logger = aya_log::EbpfLogger::init(&mut ebpf)?;
 
     // Create clsact qdisc (required for TC attach)
     reset_tc(&opt.iface)?;
@@ -53,19 +39,42 @@ async fn main() -> anyhow::Result<()> {
     }
 
     // Load and attach ingress
+    log::info!("Loading ingress eBPF program");
     let ingress: &mut SchedClassifier = ebpf.program_mut("krait_ingress").unwrap().try_into()?;
     ingress.load()?;
     ingress.attach(&opt.iface, TcAttachType::Ingress)?;
+    log::info!("Ingress eBPF program attached to {}", opt.iface);
 
     // Load and attach egress
+    log::info!("Loading egress eBPF program");
     let egress: &mut SchedClassifier = ebpf.program_mut("krait_egress").unwrap().try_into()?;
     egress.load()?;
     egress.attach(&opt.iface, TcAttachType::Egress)?;
+    log::info!("Egress eBPF program attached to {}", opt.iface);
 
-    let ctrl_c = tokio::signal::ctrl_c();
-    println!("Waiting for Ctrl-C...");
-    ctrl_c.await?;
-    println!("Exiting...");
+    log::info!("eBPF programs loaded successfully, waiting for termination signal");
+    
+    // Handle Ctrl+C signal without tokio
+    let (tx, rx) = std::sync::mpsc::channel();
+    ctrlc::set_handler(move || {
+        let _ = tx.send(());
+    })?;
+    
+    // Poll eBPF logger in a loop until signal received
+    loop {
+        match rx.try_recv() {
+            Ok(_) => {
+                log::info!("Received termination signal");
+                break;
+            }
+            Err(std::sync::mpsc::TryRecvError::Empty) => {
+                // Poll eBPF logs
+                logger.flush();
+                std::thread::sleep(std::time::Duration::from_millis(100));
+            }
+            Err(std::sync::mpsc::TryRecvError::Disconnected) => break,
+        }
+    }
 
     Ok(())
 }
