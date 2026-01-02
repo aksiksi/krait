@@ -1,86 +1,77 @@
-## POC Implementation Plan
+# CLAUDE.md - Krait Project Context
 
-### Phase 0: Foundation (Week 1)
+## What is Krait?
 
-**Goal**: Minimal eBPF + kernel WG integration on a single node
+High-performance mesh VPN using kernel WireGuard + eBPF for identity-based policy enforcement. Goal: eliminate userspace overhead of traditional mesh VPNs.
 
-1. Rust project scaffold with Aya
-2. Load kernel WG module, create interface programmatically (`wg0`)
-3. Attach TC eBPF program (ingress + egress) to `wg0`
-4. eBPF program that passes all traffic (no-op) — verify packets flow
+**Key Innovation**: Policy decisions happen in kernel eBPF maps, not userspace ACLs.
 
-**Validation**: `iperf3` through WG tunnel, confirm eBPF program is hit via `bpf_printk`
+## Architecture
 
----
+```
+┌─────────────────┐    ┌─────────────────┐
+│   krait-agent   │    │   krait-ebpf    │
+│ (Rust userspace)│───▶│ (kernel eBPF)   │
+│ • WG management │    │ • Policy engine │
+│ • Map updates   │    │ • Identity tags │
+└─────────────────┘    └─────────────────┘
+          │                       │
+          ▼                       ▼
+┌─────────────────────────────────────────┐
+│        WireGuard (wg0 interface)        │
+│           Kernel data plane             │
+└─────────────────────────────────────────┘
+```
 
-### Phase 1: Identity Tagging (Week 2)
+## Project Structure
 
-**Goal**: Attach identity to packets
+- `krait-agent/` - Userspace Rust binary (loads eBPF, manages WG)
+- `krait-ebpf/` - eBPF TC classifier programs
+- `krait-common/` - Shared types between agent and eBPF
+- `tests/` - NixOS integration tests
 
-1. Define identity model: `peer_pubkey → identity_tag` mapping
-2. eBPF map: `BPF_MAP_TYPE_HASH` keyed by WG peer index (available in skb metadata) → identity tag
-3. Rust agent populates map on peer registration
-4. eBPF program reads identity, logs it
+## Quick Start
 
-**Validation**: See identity tags in trace output for traffic between peers
+```bash
+# Setup environment
+nix develop
 
----
+# Build everything
+just release
 
-### Phase 2: Policy Engine (Week 2-3)
+# Run integration test
+just integration-test
 
-**Goal**: Enforce allow/deny based on identity pairs
+# Run agent manually
+sudo ./target/x86_64-unknown-linux-musl/release/krait --iface wg0
+```
 
-1. Policy map: `(src_identity, dst_identity)` → `action (allow/deny)`
-2. Extend to L4: `(src_identity, dst_identity, dst_port, proto)` → `action`
-3. eBPF parses IP + TCP/UDP headers, performs lookup, returns `TC_ACT_OK` or `TC_ACT_SHOT`
-4. Rust agent exposes simple API/config to update policy map
+## How It Works
 
-**Validation**: Block traffic between two identities, confirm drops
+1. **Identity Mapping**: WG peer index → identity tag (u32)
+2. **Policy Engine**: eBPF maps store `(src_identity, dst_identity) → allow/deny`
+3. **Packet Flow**: eBPF programs on wg0 check policy, allow/drop packets
+4. **Updates**: Agent updates eBPF maps when peers/policies change
 
----
+## Build Commands
 
-### Phase 3: Observability (Week 3)
+```bash
+just build-all         # Debug build
+just release           # Release build
+just test              # Unit tests
+just integration-test  # Full NixOS test
+```
 
-**Goal**: Per-identity metrics
+## Common Issues
 
-1. Metrics map: `identity_tag` → `{ bytes_in, bytes_out, packets_in, packets_out, drops }`
-2. eBPF increments atomically on each packet
-3. Rust agent exposes `/metrics` endpoint (Prometheus format)
+**"No such file or directory"**: Agent can't find `tc` command
+- Solution: Ensure `iproute2` is in PATH or systemd service path
 
-**Validation**: Grafana dashboard showing per-identity traffic
+## Requirements
 
----
+- Linux kernel ≥5.11 (WireGuard support w/ memcg-based accounting)
+- Rust nightly (for eBPF compilation)
+- sudo + CAP_SYS_ADMIN (for eBPF loading)
 
-### Phase 4: Multi-Node (Week 4)
-
-**Goal**: Centralized control plane, 3+ node mesh
-
-1. Simple coordinator (can be SQLite + HTTP API initially)
-2. Peer registration: node registers pubkey, receives identity tag + peer list
-3. Rust agent syncs peer list, configures WG peers, populates eBPF maps
-4. Policy distribution: coordinator pushes policy, agents apply to local maps
-
-**Validation**: 3-node mesh with identity-based policy, metrics from all nodes
-
----
-
-### Tech Stack
-
-| Component | Choice |
-|-----------|--------|
-| eBPF framework | Aya (Rust) |
-| WG management | `wireguard-rs` or shell out to `wg` |
-| Coordinator | Axum + SQLite (simplest) |
-| Agent-coordinator protocol | HTTP/JSON (upgrade to gRPC later) |
-| Metrics | Prometheus exposition format |
-
----
-
-### Deferred (Post-POC)
-
-- NAT traversal / STUN / relay
-- Key rotation
-- Bandwidth quotas
-- Stateful policy
-- Proper auth between agent ↔ coordinator
+Use `nix develop` to get all dependencies automatically.
 
