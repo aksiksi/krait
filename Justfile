@@ -50,7 +50,7 @@ clippy:
 test:
     cargo test
 
-integration-test:
+integration-test: release-agent
     nix build .#checks.x86_64-linux.wireguardTest --print-out-paths
 
 integration-test-interactive:
