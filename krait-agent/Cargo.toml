@@ -34,6 +34,10 @@ cargo_metadata = { workspace = true }
 # features.
 krait-ebpf = { path = "../krait-ebpf" }
 
+[lib]
+name = "krait_agent"
+path = "src/lib.rs"
+
 [[bin]]
 name = "krait"
 path = "src/main.rs"
