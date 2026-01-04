@@ -9,7 +9,7 @@ let
   # via rustup, which breaks with Nix.
   kraitAgent = pkgs.stdenv.mkDerivation {
     name = "krait-agent-prebuilt";
-    src = ../target/x86_64-unknown-linux-musl/debug;
+    src = ../../target/x86_64-unknown-linux-musl/debug;
 
     installPhase = ''
       mkdir -p $out/bin

@@ -28,7 +28,7 @@ High-performance mesh VPN using kernel WireGuard + eBPF for identity-based polic
 - `krait-agent/` - Userspace Rust binary (loads eBPF, manages WG)
 - `krait-ebpf/` - eBPF TC classifier programs
 - `krait-common/` - Shared types between agent and eBPF
-- `tests/` - NixOS integration tests
+- `tests/nixos/` - NixOS integration tests
 
 ## Quick Start
 

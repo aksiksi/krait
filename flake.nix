@@ -23,7 +23,7 @@
       {
         # NixOS integration tests
         checks = {
-          wireguardTest = pkgs.testers.nixosTest (import ./tests/wireguard.nix { inherit pkgs; });
+          wireguardTest = pkgs.testers.nixosTest (import ./tests/nixos/wireguard.nix { inherit pkgs; });
         };
 
         devShells.default = pkgs.mkShell {
