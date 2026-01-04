@@ -1,63 +1,45 @@
 # krait
 
-## Prerequisites
+## Why Krait?
 
-### Nix (recommended)
+Krait's niche is **peer-to-peer mesh for non-Kubernetes Linux hosts** — bare metal, VMs, edge devices, multi-cloud links. If you're in Kubernetes, Cilium already solves identity-based networking better.
 
-Setup a shell with nightly toolchain and all required dependencies pulled in:
+### Goals
 
-```sh
-nix develop
-```
+1. **Pure kernel data path** — Zero userspace packet processing; TC eBPF → kernel WireGuard, no copies
+2. **eBPF policy engine** — Identity-based allow/deny enforced per-packet in kernel, not iptables
+3. **Microsecond policy updates** — Atomic map updates, no rule regeneration or conntrack flush
+4. **L4 identity policy** — `(src_identity, dst_identity, port, proto)` granularity in data path
+5. **eBPF-native observability** — Per-identity traffic counters, drops, exposed as Prometheus metrics without sidecars
+6. **Lean agent** — Rust, passive after setup, near-zero CPU during data transfer
+7. **O(1) policy scaling** — Map lookups regardless of mesh size (vs O(n) iptables rules)
+8. **Mid-connection revocation** — Policy change takes effect on next packet, not next connection
 
-### Manual
+### Non-Goals (Out of Scope)
 
-1. nightly rust toolchain: `rustup toolchain install nightly --component rust-src`
-1. bpf-linker: `cargo install bpf-linker` (`--no-default-features` on macOS)
+1. **Cross-platform support** — Linux-only, no Windows/macOS/iOS/Android
+2. **NAT traversal / STUN / DERP relays** — Assumes direct connectivity or external solution
+3. **SSO / OIDC integration** — No built-in identity provider integration
+4. **Admin console / UI** — CLI and config files only
+5. **MagicDNS / service discovery** — No automatic DNS for peers
+6. **Userspace fallback** — Requires kernel WireGuard, no wireguard-go fallback
+7. **Managed SaaS** — Self-hosted coordinator only
 
-## Build & Run
+### Target Users
 
-Use `cargo build`, `cargo check`, etc. as normal. Run your program with:
+- **Multi-cloud site-to-site** (VMs, not pods)
+- **Edge / IoT fleets** (Linux devices outside K8s)
+- **Homelab / self-hosters**
+- **Hybrid infra** where some nodes aren't in K8s
 
-```shell
-cargo run --release
-```
+## Krait vs. Cilium
 
-Cargo build scripts are used to automatically build the eBPF correctly and include it in the
-program.
+| Use Case | Cilium | Krait |
+|----------|--------|-------|
+| K8s CNI (pod networking) | ✓ | ✗ |
+| K8s Network Policy | ✓ | ✗ |
+| Service mesh (L7) | ✓ | ✗ |
+| Non-K8s hosts | Possible but awkward | ✓ |
+| Site-to-site VPN | ✗ | ✓ |
+| Peer-to-peer mesh | ✗ | ✓ |
 
-## Cross-compiling on macOS
-
-Cross compilation should work on both Intel and Apple Silicon Macs.
-
-```shell
-CC=${ARCH}-linux-musl-gcc cargo build --package krait --release \
-  --target=${ARCH}-unknown-linux-musl \
-  --config=target.${ARCH}-unknown-linux-musl.linker=\"${ARCH}-linux-musl-gcc\"
-```
-The cross-compiled program `target/${ARCH}-unknown-linux-musl/release/krait` can be
-copied to a Linux server or VM and run there.
-
-## License
-
-With the exception of eBPF code, krait is distributed under the terms
-of either the [MIT license] or the [Apache License] (version 2.0), at your
-option.
-
-Unless you explicitly state otherwise, any contribution intentionally submitted
-for inclusion in this crate by you, as defined in the Apache-2.0 license, shall
-be dual licensed as above, without any additional terms or conditions.
-
-### eBPF
-
-All eBPF code is distributed under either the terms of the
-[GNU General Public License, Version 2] or the [MIT license], at your
-option.
-
-Unless you explicitly state otherwise, any contribution intentionally submitted
-for inclusion in this project by you, as defined in the GPL-2 license, shall be
-dual licensed as above, without any additional terms or conditions.
-
-[Apache license]: LICENSE-APACHE
-[MIT license]: LICENSE-MIT
-[GNU General Public License, Version 2]: LICENSE-GPL2

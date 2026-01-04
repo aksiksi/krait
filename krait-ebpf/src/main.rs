@@ -65,24 +65,34 @@ fn ptr_at<T>(ctx: &TcContext, offset: usize) -> Result<*const T, ()> {
 
 #[inline(always)]
 fn try_krait(ctx: TcContext, direction: Direction) -> Result<i32, ()> {
-    info!(&ctx, "krait: packet received on {} direction", direction.as_str());
-    
+    info!(
+        &ctx,
+        "krait: packet received on {} direction",
+        direction.as_str()
+    );
+
     // wg0 is a TUN device - no Ethernet header, start directly with IP
     let ipv4hdr: *const Ipv4Hdr = ptr_at(&ctx, 0)?;
-    
+
     // Check if this looks like an IPv4 packet (basic validation)
     let version = unsafe { (*ipv4hdr).version() };
     if version != 4 {
         info!(&ctx, "krait: not IPv4 packet, version = {}", version);
         return Ok(TC_ACT_OK);
     }
-    
+
     let source_addr = unsafe { (*ipv4hdr).src_addr() };
     let dest_addr = unsafe { (*ipv4hdr).dst_addr() };
     let protocol = unsafe { (*ipv4hdr).proto };
-    
-    info!(&ctx, "krait: {} packet - SRC: {:i} -> DST: {:i}, proto: {}", 
-          direction.as_str(), source_addr, dest_addr, protocol as u8);
+
+    info!(
+        &ctx,
+        "krait: {} packet - SRC: {:i} -> DST: {:i}, proto: {}",
+        direction.as_str(),
+        source_addr,
+        dest_addr,
+        protocol as u8
+    );
 
     // Parse L4 information if TCP/UDP
     match protocol {
@@ -90,15 +100,19 @@ fn try_krait(ctx: TcContext, direction: Direction) -> Result<i32, ()> {
             let tcphdr: *const TcpHdr = ptr_at(&ctx, Ipv4Hdr::LEN)?;
             let src_port = unsafe { u16::from_be_bytes((*tcphdr).source) };
             let dst_port = unsafe { u16::from_be_bytes((*tcphdr).dest) };
-            info!(&ctx, "krait: TCP {}:{} -> {}:{}", 
-                  source_addr, src_port, dest_addr, dst_port);
+            info!(
+                &ctx,
+                "krait: TCP {}:{} -> {}:{}", source_addr, src_port, dest_addr, dst_port
+            );
         }
         IpProto::Udp => {
             let udphdr: *const UdpHdr = ptr_at(&ctx, Ipv4Hdr::LEN)?;
             let src_port = unsafe { (*udphdr).src_port() };
             let dst_port = unsafe { (*udphdr).dst_port() };
-            info!(&ctx, "krait: UDP {}:{} -> {}:{}", 
-                  source_addr, src_port, dest_addr, dst_port);
+            info!(
+                &ctx,
+                "krait: UDP {}:{} -> {}:{}", source_addr, src_port, dest_addr, dst_port
+            );
         }
         IpProto::Icmp => {
             info!(&ctx, "krait: ICMP packet");

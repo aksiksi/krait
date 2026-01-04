@@ -4,6 +4,7 @@ members = [
     "krait-agent",
     "krait-common",
     "krait-ebpf",
+    "krait-tests",
 ]
 default-members = ["krait-agent", "krait-common"]
 

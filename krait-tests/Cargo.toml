@@ -1,0 +1,23 @@
+[package]
+name = "krait-tests"
+version = "0.1.0"
+edition.workspace = true
+
+[dependencies]
+krait-agent = { path = "../krait-agent" }
+krait-common = { path = "../krait-common", features = ["user"] }
+
+# Core dependencies
+anyhow = { workspace = true }
+env_logger = { workspace = true }
+log = { workspace = true }
+clap = { workspace = true, features = ["derive"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Test framework
+libtest-mimic = "0.8"
+
+[[bin]]
+name = "krait-tests"
+path = "src/main.rs"

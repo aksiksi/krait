@@ -1,26 +1,29 @@
 { pkgs, ... }:
 
 let
-  # Use pre-built krait-agent binary from local build
-  # This assumes `just release-agent` was run before the integration test
+  # Use pre-built binaries from local build
+  # This assumes `just release-agent` and `just release-tests` were run before the test
   #
   # TODO(aksiksi): Define this as a native Nix derivation instead. The tricky
   # part is working around the fact that Aya build.rs scripts do manual rebuilds
   # via rustup, which breaks with Nix.
-  kraitAgent = pkgs.stdenv.mkDerivation {
-    name = "krait-agent-prebuilt";
-    src = ../../target/x86_64-unknown-linux-musl/debug;
+  kraitBinaries = pkgs.stdenv.mkDerivation {
+    name = "krait-binaries-prebuilt";
+    src = ../../target/x86_64-unknown-linux-musl/release;
 
     installPhase = ''
       mkdir -p $out/bin
       cp krait $out/bin/
+      cp krait-tests $out/bin/
       chmod +x $out/bin/krait
+      chmod +x $out/bin/krait-tests
     '';
 
-    # Make sure the binary exists after installation
+    # Make sure the binaries exist after installation
     doInstallCheck = true;
     installCheckPhase = ''
       test -f $out/bin/krait
+      test -f $out/bin/krait-tests
     '';
   };
 
@@ -34,7 +37,7 @@ let
 
     serviceConfig = {
       Type = "simple";
-      ExecStart = "${kraitAgent}/bin/krait --iface wg0";
+      ExecStart = "${kraitBinaries}/bin/krait --iface wg0";
       Restart = "on-failure";
       RestartSec = "5s";
 
@@ -161,6 +164,16 @@ in
         server.succeed("iperf3 -s -D")
         server.sleep(1)
         client.succeed("iperf3 -c 10.10.0.1 -t 5")
+
+    with subtest("Run Krait integration test"):
+        # Run integration test on client side - it will send traffic to server
+        print("Running Krait integration test suite on client...")
+        client.succeed("RUST_LOG=info ${kraitBinaries}/bin/krait-tests --interface wg0 --target-ip 10.10.0.1 --num-bytes 30M --output-file /tmp/krait-test-results.json --test-threads 1")
+
+        # Show test results
+        results = client.succeed("cat /tmp/krait-test-results.json")
+        print("Krait integration test results:")
+        print(results)
 
     print("Wireguard tunnel test completed successfully!")
   '';

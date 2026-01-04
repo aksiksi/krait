@@ -12,6 +12,10 @@ build-ebpf:
 build-agent:
     cargo build -p krait-agent --target x86_64-unknown-linux-musl
 
+# Build the integration test (debug)
+build-tests:
+    cargo build -p krait-tests --target x86_64-unknown-linux-musl
+
 # Build everything in debug mode (eBPF + agent)
 build-all: build-ebpf build-agent
 
@@ -25,6 +29,10 @@ release-ebpf:
 # Build the agent (release)
 release-agent:
     cargo build -p krait-agent --target x86_64-unknown-linux-musl --release
+
+# Build the integration test (release, static)
+release-tests:
+    cargo build -p krait-tests --target x86_64-unknown-linux-musl --release
 
 # Clean all build artifacts
 clean:
@@ -51,11 +59,9 @@ test:
     cargo test
 
 integration-test:
-    nix develop --command just build-agent
     nix build .#checks.x86_64-linux.wireguardTest --print-out-paths
 
 integration-test-interactive:
-    nix develop --command just build-agent
     nix build .#checks.x86_64-linux.wireguardTest.driverInteractive && ./result/bin/nixos-test-driver
 
 # Development workflow - format, lint, test, build
